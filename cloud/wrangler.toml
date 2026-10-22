@@ -1,0 +1,13 @@
+# Worker que assina os links do R2 para o FitKnee. Deploy: npm run deploy
+name = "fitknee-cloud"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+BUCKET_NAME = "fitknee"
+
+# Segredos (npx wrangler@4 secret put NOME), nunca neste arquivo:
+#   TOKEN                 senha longa que o app usa (openssl rand -hex 32)
+#   R2_ACCOUNT_ID         id da conta Cloudflare
+#   R2_ACCESS_KEY_ID      token de API do R2, com "Object Read & Write" só no bucket fitknee
+#   R2_SECRET_ACCESS_KEY

@@ -1,0 +1,14 @@
+{
+  "name": "fitknee-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "deploy": "npx wrangler@4 deploy",
+    "local": "node scripts/local.js"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20"
+  }
+}

@@ -9,6 +9,7 @@ import 'screens/diary_screen.dart';
 import 'screens/today_screen.dart';
 import 'screens/training_screen.dart';
 import 'services/alarms.dart';
+import 'services/cloud.dart';
 import 'store.dart';
 import 'theme.dart';
 
@@ -19,10 +20,14 @@ Future<void> main() async {
   await store.load();
   final alarms = Alarms();
   alarms.sync(store.meals).ignore();
+  final cloud = Cloud(store);
+  await cloud.load();
+  cloud.sync().ignore();
   runApp(MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: store),
       Provider.value(value: alarms),
+      ChangeNotifierProvider.value(value: cloud),
     ],
     child: const FitKneeApp(),
   ));

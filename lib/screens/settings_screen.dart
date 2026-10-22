@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../logic/knee.dart';
 import '../models.dart';
 import '../services/alarms.dart';
+import '../services/cloud.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -55,7 +56,9 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]),
         ),
-        const Section('Backup'),
+        const Section('Nuvem'),
+        const _CloudCard(),
+        const Section('Backup em arquivo'),
         Card(
           child: Column(children: [
             ListTile(
@@ -92,9 +95,118 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          'Tudo fica só neste celular. O FitKnee não substitui o fisioterapeuta: as regras do semáforo são um guia '
+          '${context.watch<Cloud>().configured ? 'Os dados ficam neste celular, com cópia no seu R2.' : 'Tudo fica só neste celular.'} '
+          'O FitKnee não substitui o fisioterapeuta: as regras do semáforo são um guia '
           'conservador. Dor forte, inchaço, falseio ou travamento: pare e procure avaliação.',
           style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Backup no Cloudflare R2: conectar, ver a última sincronização, sincronizar e restaurar.
+class _CloudCard extends StatelessWidget {
+  const _CloudCard();
+
+  Future<void> _connect(BuildContext context, Cloud cloud) async {
+    final url = TextEditingController(text: cloud.url), token = TextEditingController(text: cloud.token);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Conectar ao R2'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Endereço do Worker fitknee-cloud e o TOKEN configurado nele.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: url,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(labelText: 'Endereço', hintText: 'https://fitknee-cloud.xxx.workers.dev'),
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: token, autocorrect: false, obscureText: true, decoration: const InputDecoration(labelText: 'Token')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Conectar')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      await cloud.configure(url.text, token.text);
+      if (context.mounted) toast(context, 'Conectado. Enviando fotos, vídeos e dados...');
+      await cloud.sync();
+    } on CloudException catch (e) {
+      if (context.mounted) toast(context, e.message);
+    }
+  }
+
+  Future<void> _restore(BuildContext context, Cloud cloud) async {
+    if (!await confirm(context, 'Restaurar da nuvem?', 'Os dados deste celular serão substituídos pelo backup do R2.', ok: 'Restaurar') ||
+        !context.mounted) {
+      return;
+    }
+    toast(context, 'Baixando da nuvem...');
+    try {
+      final n = await cloud.restore();
+      if (!context.mounted) return;
+      context.read<Alarms>().sync(context.read<Store>().meals).ignore();
+      toast(context, 'Restaurado ($n fotos e vídeos baixados).');
+    } on CloudException catch (e) {
+      if (context.mounted) toast(context, e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = context.watch<Cloud>();
+    final cs = Theme.of(context).colorScheme;
+    if (!cloud.configured) {
+      return Card(
+        child: ListTile(
+          leading: const Badge2(Icons.cloud_outlined, teal),
+          title: const Text('Backup no Cloudflare R2', style: TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: const Text('Fotos, vídeos e dados com cópia automática na nuvem'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _connect(context, cloud),
+        ),
+      );
+    }
+    final last = cloud.lastSync;
+    return Card(
+      child: Column(children: [
+        ListTile(
+          leading: Badge2(cloud.error != null ? Icons.cloud_off : Icons.cloud_done_outlined, cloud.error != null ? amber : green),
+          title: Text(
+            cloud.syncing ? 'Sincronizando...' : (cloud.error ?? 'Sincronizado'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(last == null
+              ? 'Ainda não sincronizou'
+              : 'Última vez: ${dayMonth.format(last)}, ${last.hour.toString().padLeft(2, '0')}:${last.minute.toString().padLeft(2, '0')} · '
+                  '${cloud.uploaded.length} fotos e vídeos'),
+          trailing: cloud.syncing
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3))
+              : IconButton(tooltip: 'Sincronizar agora', icon: const Icon(Icons.sync), onPressed: cloud.sync),
+        ),
+        ListTile(
+          leading: const Badge2(Icons.cloud_download_outlined, brand),
+          title: const Text('Restaurar da nuvem', style: TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: const Text('Celular novo: baixa dados, fotos e vídeos'),
+          onTap: cloud.syncing ? null : () => _restore(context, cloud),
+        ),
+        ListTile(
+          leading: Badge2(Icons.link_off, cs.onSurfaceVariant),
+          title: const Text('Desconectar', style: TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(cloud.url, maxLines: 1, overflow: TextOverflow.ellipsis),
+          onTap: () async {
+            if (await confirm(context, 'Desconectar da nuvem?', 'O que já está no R2 continua lá; só para de sincronizar.',
+                ok: 'Desconectar')) {
+              await cloud.disconnect();
+            }
+          },
         ),
       ]),
     );
