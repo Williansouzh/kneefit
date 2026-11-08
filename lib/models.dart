@@ -5,7 +5,10 @@ String dayKey(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 DateTime parseDay(String s) => DateTime.parse(s);
 DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-String newId() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+/// O relógio sozinho repete valor quando vários ids são criados de seguida (o plano padrão
+/// cria dezenas de uma vez; na web o relógio só tem milissegundos). O contador desempata.
+int _idSeq = 0;
+String newId() => '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${(_idSeq++).toRadixString(36)}';
 
 double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
 
